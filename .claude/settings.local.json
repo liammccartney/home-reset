@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(sips:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(npm install:*)",
+      "Bash(npx next:*)",
+      "Bash(npm uninstall:*)",
+      "Bash(npx vite:*)"
+    ]
+  }
+}
