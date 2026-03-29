@@ -19,6 +19,19 @@ export const metadata = {
     statusBarStyle: "default",
     title: "Home Reset",
   },
+  openGraph: {
+    title: "The Home Reset",
+    description: "ADHD-friendly daily & weekly cleaning checklist",
+    type: "website",
+    siteName: "The Home Reset",
+    images: [{ url: "/og.png", width: 1200, height: 630 }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "The Home Reset",
+    description: "ADHD-friendly daily & weekly cleaning checklist",
+    images: ["/og.png"],
+  },
 };
 
 export default function RootLayout({ children }) {
