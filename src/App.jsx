@@ -122,43 +122,29 @@ function useRealtimeTimer() {
   }, [timer.is_active, timer.started_at, timer.duration_seconds, timer.paused_remaining]);
 
   const start = useCallback(async () => {
-    if (!supabase) return;
-    await supabase.from("timer").update({
-      started_at: new Date().toISOString(),
-      duration_seconds: 600,
-      is_active: true,
-      paused_remaining: null,
-    }).eq("id", 1);
+    const patch = { started_at: new Date().toISOString(), duration_seconds: 600, is_active: true, paused_remaining: null };
+    setTimer((prev) => ({ ...prev, ...patch }));
+    if (supabase) await supabase.from("timer").update(patch).eq("id", 1);
   }, []);
 
   const pause = useCallback(async () => {
-    if (!supabase) return;
     const elapsed = (Date.now() - new Date(timer.started_at).getTime()) / 1000;
     const remaining = Math.max(0, Math.ceil(timer.duration_seconds - elapsed));
-    await supabase.from("timer").update({
-      is_active: false,
-      paused_remaining: remaining,
-    }).eq("id", 1);
+    const patch = { is_active: false, paused_remaining: remaining };
+    setTimer((prev) => ({ ...prev, ...patch }));
+    if (supabase) await supabase.from("timer").update(patch).eq("id", 1);
   }, [timer.started_at, timer.duration_seconds]);
 
   const resume = useCallback(async () => {
-    if (!supabase) return;
-    await supabase.from("timer").update({
-      started_at: new Date().toISOString(),
-      duration_seconds: timer.paused_remaining,
-      is_active: true,
-      paused_remaining: null,
-    }).eq("id", 1);
+    const patch = { started_at: new Date().toISOString(), duration_seconds: timer.paused_remaining, is_active: true, paused_remaining: null };
+    setTimer((prev) => ({ ...prev, ...patch }));
+    if (supabase) await supabase.from("timer").update(patch).eq("id", 1);
   }, [timer.paused_remaining]);
 
   const reset = useCallback(async () => {
-    if (!supabase) return;
-    await supabase.from("timer").update({
-      is_active: false,
-      started_at: null,
-      duration_seconds: 600,
-      paused_remaining: null,
-    }).eq("id", 1);
+    const patch = { is_active: false, started_at: null, duration_seconds: 600, paused_remaining: null };
+    setTimer((prev) => ({ ...prev, ...patch }));
+    if (supabase) await supabase.from("timer").update(patch).eq("id", 1);
   }, []);
 
   const finished = timer.is_active && display <= 0;
@@ -189,7 +175,14 @@ function useRealtimeTasks() {
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "task_completions" }, (payload) => {
         const row = payload.new;
         if (row.date_key === today || row.date_key === weekId) {
-          setCompletions((prev) => prev.some((c) => c.id === row.id) ? prev : [...prev, row]);
+          setCompletions((prev) => {
+            // Replace optimistic entry (string id) with the real row
+            const withoutOptimistic = prev.filter((c) =>
+              typeof c.id === "number" || !(c.task_id === row.task_id && c.task_type === row.task_type && c.date_key === row.date_key)
+            );
+            if (withoutOptimistic.some((c) => c.id === row.id)) return withoutOptimistic;
+            return [...withoutOptimistic, row];
+          });
         }
       })
       .on("postgres_changes", { event: "DELETE", schema: "public", table: "task_completions" }, (payload) => {
@@ -220,15 +213,20 @@ function useRealtimeTasks() {
 
   const toggle = useCallback(
     async (taskId, type, userName) => {
-      if (!supabase) return;
       const existing = getCompletion(taskId, type);
       if (existing) {
-        await supabase.from("task_completions").delete().eq("id", existing.id);
+        // Optimistic remove
+        setCompletions((prev) => prev.filter((c) => c !== existing));
+        if (supabase) await supabase.from("task_completions").delete().eq("id", existing.id);
       } else {
-        await supabase.from("task_completions").insert({
+        // Optimistic add with string id (realtime will replace with real row)
+        const dateKey = type === "daily" ? today : weekId;
+        const optimistic = { id: `opt-${taskId}-${type}`, task_id: taskId, task_type: type, date_key: dateKey, completed_by: userName };
+        setCompletions((prev) => [...prev, optimistic]);
+        if (supabase) await supabase.from("task_completions").insert({
           task_id: taskId,
           task_type: type,
-          date_key: type === "daily" ? today : weekId,
+          date_key: dateKey,
           completed_by: userName,
         });
       }
